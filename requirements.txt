@@ -1,0 +1,8 @@
+torch
+torchvision
+torchaudio
+torch-geometric
+flwr
+numpy
+scikit-learn
+matplotlib
