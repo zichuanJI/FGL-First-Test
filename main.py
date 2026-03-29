@@ -1,50 +1,31 @@
-import torch
-import torch.nn.functional as F
-
-from src.model import GCN
-from src.data_loader import load_data
+from src.data_loader import load_data, split_train_nodes
 
 
-def train():
+def inspect_client_splits():
     data, dataset = load_data()
+    client_masks = split_train_nodes(data, num_clients=3, seed=42)
 
-    model = GCN(
-        in_channels=dataset.num_features,
-        hidden_channels=16,
-        out_channels=dataset.num_classes
-    )
+    total_train_nodes = int(data.train_mask.sum())
+    print(f"Total train nodes: {total_train_nodes}")
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-4)
+    total_from_clients = 0
+    union_mask = None
 
-    model.train()
+    for i, mask in enumerate(client_masks):
+        num_nodes = int(mask.sum())
+        total_from_clients += num_nodes
+        print(f"Client {i} train nodes: {num_nodes}")
 
-    for epoch in range(200):
-        optimizer.zero_grad()
+        if union_mask is None:
+            union_mask = mask.clone()
+        else:
+            overlap = (union_mask & mask).sum().item()
+            print(f"Overlap with previous clients for client {i}: {overlap}")
+            union_mask = union_mask | mask
 
-        out = model(data.x, data.edge_index)
-
-        loss = F.cross_entropy(out[data.train_mask], data.y[data.train_mask])
-        loss.backward()
-        optimizer.step()
-
-        if epoch % 20 == 0:
-            print(f"Epoch {epoch}, Loss: {loss.item():.4f}")
-
-    return model, data
-
-
-def test(model, data):
-    model.eval()
-
-    out = model(data.x, data.edge_index)
-    pred = out.argmax(dim=1)
-
-    correct = (pred[data.test_mask] == data.y[data.test_mask]).sum()
-    acc = int(correct) / int(data.test_mask.sum())
-
-    print(f"Test Accuracy: {acc:.4f}")
+    print(f"Sum of all client train nodes: {total_from_clients}")
+    print(f"Union of all client train nodes: {int(union_mask.sum())}")
 
 
 if __name__ == "__main__":
-    model, data = train()
-    test(model, data)
+    inspect_client_splits()
