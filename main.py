@@ -3,6 +3,7 @@ import torch
 from src.data_loader import load_data, split_train_nodes
 from src.model import GCN
 from src.client import train_local
+from src.server import fedavg
 
 
 def evaluate(model, data):
@@ -17,14 +18,7 @@ def evaluate(model, data):
     return acc
 
 
-def compare_model_params(model_a, model_b):
-    total_diff = 0.0
-    for param_a, param_b in zip(model_a.parameters(), model_b.parameters()):
-        total_diff += torch.norm(param_a - param_b).item()
-    return total_diff
-
-
-def test_single_client_local_training():
+def test_one_round_federated_training():
     data, dataset = load_data()
     client_masks = split_train_nodes(data, num_clients=3, seed=42)
 
@@ -35,24 +29,32 @@ def test_single_client_local_training():
     )
 
     acc_before = evaluate(global_model, data)
-    print(f"Global model accuracy before local training: {acc_before:.4f}")
+    print(f"Global model accuracy before federated round: {acc_before:.4f}")
 
-    local_model, num_samples = train_local(
-        model=global_model,
-        data=data,
-        client_mask=client_masks[0],
-        lr=0.01,
-        weight_decay=5e-4,
-        local_epochs=50
-    )
+    local_models = []
+    sample_counts = []
 
-    acc_after = evaluate(local_model, data)
-    param_diff = compare_model_params(global_model, local_model)
+    for i, client_mask in enumerate(client_masks):
+        local_model, num_samples = train_local(
+            model=global_model,
+            data=data,
+            client_mask=client_mask,
+            lr=0.01,
+            weight_decay=5e-4,
+            local_epochs=50
+        )
 
-    print(f"Client 0 sample count: {num_samples}")
-    print(f"Local model accuracy after client 0 training: {acc_after:.4f}")
-    print(f"Parameter difference between global and local model: {param_diff:.6f}")
+        local_acc = evaluate(local_model, data)
+        print(f"Client {i}: num_samples={num_samples}, local_acc={local_acc:.4f}")
+
+        local_models.append(local_model)
+        sample_counts.append(num_samples)
+
+    new_global_model = fedavg(local_models, sample_counts)
+
+    acc_after = evaluate(new_global_model, data)
+    print(f"Global model accuracy after federated round: {acc_after:.4f}")
 
 
 if __name__ == "__main__":
-    test_single_client_local_training()
+    test_one_round_federated_training()
