@@ -18,9 +18,9 @@ def evaluate(model, data):
     return acc
 
 
-def test_one_round_federated_training():
+def run_federated_training(num_rounds=10, num_clients=3, local_epochs=10):
     data, dataset = load_data()
-    client_masks = split_train_nodes(data, num_clients=3, seed=42)
+    client_masks = split_train_nodes(data, num_clients=num_clients, seed=42)
 
     global_model = GCN(
         in_channels=dataset.num_features,
@@ -28,33 +28,65 @@ def test_one_round_federated_training():
         out_channels=dataset.num_classes
     )
 
-    acc_before = evaluate(global_model, data)
-    print(f"Global model accuracy before federated round: {acc_before:.4f}")
+    initial_acc = evaluate(global_model, data)
+    print(f"Initial global accuracy: {initial_acc:.4f}")
 
-    local_models = []
-    sample_counts = []
+    history = []
 
-    for i, client_mask in enumerate(client_masks):
-        local_model, num_samples = train_local(
-            model=global_model,
-            data=data,
-            client_mask=client_mask,
-            lr=0.01,
-            weight_decay=5e-4,
-            local_epochs=50
-        )
+    for round_idx in range(num_rounds):
+        print(f"\n===== Federated Round {round_idx + 1} =====")
 
-        local_acc = evaluate(local_model, data)
-        print(f"Client {i}: num_samples={num_samples}, local_acc={local_acc:.4f}")
+        local_models = []
+        sample_counts = []
+        local_accs = []
 
-        local_models.append(local_model)
-        sample_counts.append(num_samples)
+        for i, client_mask in enumerate(client_masks):
+            local_model, num_samples = train_local(
+                model=global_model,
+                data=data,
+                client_mask=client_mask,
+                lr=0.01,
+                weight_decay=5e-4,
+                local_epochs=local_epochs
+            )
 
-    new_global_model = fedavg(local_models, sample_counts)
+            local_acc = evaluate(local_model, data)
+            print(f"Client {i}: num_samples={num_samples}, local_acc={local_acc:.4f}")
 
-    acc_after = evaluate(new_global_model, data)
-    print(f"Global model accuracy after federated round: {acc_after:.4f}")
+            local_models.append(local_model)
+            sample_counts.append(num_samples)
+            local_accs.append(local_acc)
+
+        global_model = fedavg(local_models, sample_counts)
+        global_acc = evaluate(global_model, data)
+
+        avg_local_acc = sum(local_accs) / len(local_accs)
+
+        print(f"Round {round_idx + 1} global accuracy: {global_acc:.4f}")
+        print(f"Round {round_idx + 1} average local accuracy: {avg_local_acc:.4f}")
+
+        history.append({
+            "round": round_idx + 1,
+            "global_acc": global_acc,
+            "avg_local_acc": avg_local_acc,
+        })
+
+    return global_model, history
 
 
 if __name__ == "__main__":
-    test_one_round_federated_training()
+    import torch
+
+    final_model, history = run_federated_training(
+        num_rounds=10,
+        num_clients=3,
+        local_epochs=10
+    )
+
+    print("\n===== Training History =====")
+    for item in history:
+        print(
+            f"Round {item['round']}: "
+            f"global_acc={item['global_acc']:.4f}, "
+            f"avg_local_acc={item['avg_local_acc']:.4f}"
+        )

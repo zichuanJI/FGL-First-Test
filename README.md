@@ -146,10 +146,12 @@ python main.py
 
 ## Status
 
-- [x] Project scaffold created
-- [x] Environment setup completed
-- [x] Cora dataset loaded successfully
-- [x] Single-machine GCN baseline completed
-- [ ] Multi-client data partition
-- [ ] Manual federated averaging
-- [ ] Flower-based federated training
+- [x] Load Cora with PyTorch Geometric
+- [x] Train single-machine GCN baseline
+- [x] Partition training nodes into multiple clients
+- [x] Implement local client training
+- [x] Implement one-round FedAvg aggregation
+- [x] Multi-round federated training
+- [ ] Training curve visualization
+- [ ] Non-IID client partition
+- [ ] Flower-based implementation
